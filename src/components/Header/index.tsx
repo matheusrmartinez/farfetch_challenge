@@ -14,7 +14,7 @@ import {
 export default function Header() {
   return (
     <>
-      <Box p={6}  justify="flex-start">
+      <Box p={6} ml="auto">
         <HStack alignItems={"center"}>
           <Text  fontSize={'28px'} fontWeight={'600'}>
             SpaceX - Launches
