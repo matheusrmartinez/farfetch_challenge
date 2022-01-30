@@ -7,7 +7,6 @@ import {
   Image,
   Box,
   Select,
-  Badge,
   Tabs,
   TabList,
   Tab,
@@ -23,7 +22,6 @@ import DatePicker from 'react-datepicker';
 import { api } from '../services/api';
 import { getYear, parseISO } from 'date-fns';
 import ClipLoader from 'react-spinners/ClipLoader';
-import { css } from '@emotion/react';
 
 interface LaunchesData {
   docs: {
@@ -40,68 +38,41 @@ interface LaunchesData {
     name: string;
     date_utc: string;
     year: number;
+    id: string;
   }[];
   hasNextPage: boolean;
-  id: string;
 }
 
 export default function Home() {
-  const [comboBoxSelectedValue, setComboBoxSelectedValue] = useState('');
+  const [comboBoxPastSelectedValue, setComboBoxPastSelectedValue] =
+    useState('');
+  const [comboBoxUpComingSelectedValue, setComboBoxUpComingSelectedValue] =
+    useState('');
   let [loading, setLoading] = useState(true);
   let [color, setColor] = useState('#ffffff');
-  // const [offSet, setOffSet] = useState(0);
-  const [launchesData, setLaunchesData] = useState<LaunchesData[]>(
+  const [pastLaunchesData, setPastLaunchesData] = useState<LaunchesData[]>(
     [] as LaunchesData[],
   );
-  const [startDate, setStartDate] = useState<Date>();
-  const [lastDate, setLastDate] = useState<Date>();
+  const [upComingLaunchesData, setUpcomingLaunchesData] = useState<
+    LaunchesData[]
+  >([] as LaunchesData[]);
+  const [pastStartDate, setPastStartDate] = useState<Date>();
+  const [pastLastDate, setPastLastDate] = useState<Date>();
+  const [upComingStartDate, setUpComingStartDate] = useState<Date>();
+  const [upComingLastDate, setUpComingLastDate] = useState<Date>();
   const [isAppyFilterButtonPressed, setIsAppyFilterButtonPressed] =
     useState(false);
   const [isClearFilterButtonPressed, setIsClearFilterButtonPressed] =
     useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const offSet = useRef(0);
-
-  const handleMissionStatusValue = (
-    event: React.ChangeEvent<HTMLSelectElement>,
-  ) => {
-    setComboBoxSelectedValue(event.target.value);
-  };
-
-  const handleSuccessStatus = () => {
-    switch (comboBoxSelectedValue) {
-      case '1':
-        return true;
-
-      case '2':
-        return false;
-
-      case '3':
-        return '';
-
-      default:
-        return '';
-    }
-  };
-
-  const launchParams = {
-    query: {
-      // upcoming: true,
-      // success: true,
-      // date_utc: {
-      //   $gte: new Date(),
-      //   $lte: new Date(),
-      // },
-    },
-    options: {
-      select: 'flight_number rocket success date_utc name links id ',
-      limit: 4,
-      offset: offSet.current,
-    },
-  };
+  const [isBottomPageReached, setIsBottomPageReached] = useState(false);
+  const [tabIndex, setTabIndex] = useState(0);
+  const pastOffSet = useRef(0);
+  const upComingOffSet = useRef(0);
 
   useEffect(() => {
-    getLaunches();
+    getPastLaunches();
+    getUpcomingLaunches();
   }, []);
 
   useEffect(() => {
@@ -114,6 +85,26 @@ export default function Home() {
     };
   }, []);
 
+  useEffect(() => {
+    if (isBottomPageReached) {
+      tabIndex === 0 ? getPastLaunches() : getUpcomingLaunches();
+    }
+  }, [isBottomPageReached]);
+
+  useEffect(() => {
+    if (isAppyFilterButtonPressed || isClearFilterButtonPressed) {
+      tabIndex === 0 ? getPastLaunches() : getUpcomingLaunches();
+    }
+  }, [isAppyFilterButtonPressed, isClearFilterButtonPressed]);
+
+  const handleMissionStatusValue = (
+    event: React.ChangeEvent<HTMLSelectElement>,
+  ) => {
+    tabIndex === 0
+      ? setComboBoxPastSelectedValue(event.target.value)
+      : setComboBoxUpComingSelectedValue(event.target.value);
+  };
+
   async function getRocketName(launches: LaunchesData) {
     if (!launches) return;
 
@@ -125,11 +116,55 @@ export default function Home() {
     return launches;
   }
 
-  async function getLaunches(isBottomPageReached: boolean = false) {
-    launchParams.options.offset = offSet.current;
+  async function getPastLaunches() {
+    let launches: LaunchesData = {} as LaunchesData;
+
+    const params = {
+      query: getQueryParams(true),
+      options: {
+        select: 'flight_number rocket success date_utc name links id ',
+        limit: 4,
+        offset: pastOffSet.current,
+      },
+    };
+
+    const response = await api.post(`/launches/query`, params);
+    launches = response.data;
+
+    const launchesUpdated = await getRocketName(launches);
+
+    let launchesFormatted = {
+      docs: launchesUpdated.docs.map(launch => {
+        return {
+          ...launch,
+          alt: `${launch.name} logo`,
+          year: getYear(parseISO(launch.date_utc)),
+        };
+      }),
+      hasNextPage: launches.hasNextPage,
+    } as LaunchesData;
+
+    setPastLaunchesData([...pastLaunchesData, launchesFormatted]);
+    setIsLoading(false);
+    setIsAppyFilterButtonPressed(false);
+    setIsClearFilterButtonPressed(false);
+    pastOffSet.current += 4;
+  }
+
+  async function getUpcomingLaunches() {
+    console.log('caiu')
     let launches: LaunchesData;
 
-    const response = await api.post(`/launches/query`, launchParams);
+    const params = {
+      query: getQueryParams(false),
+      options: {
+        select: 'flight_number rocket success date_utc name links id ',
+        limit: 4,
+        offset: upComingOffSet.current,
+      },
+    };
+
+    const response = await api.post(`/launches/query`, params);
 
     launches = response.data;
 
@@ -144,23 +179,52 @@ export default function Home() {
         };
       }),
       hasNextPage: launches.hasNextPage,
-      id: launches.id,
     } as LaunchesData;
 
-    
-
-    setLaunchesData([...launchesData, launchesFormatted]);
+    setUpcomingLaunchesData([...upComingLaunchesData, launchesFormatted]);
     setIsLoading(false);
-    offSet.current += isBottomPageReached ? 4 : 0;
+    setIsAppyFilterButtonPressed(false);
+    setIsClearFilterButtonPressed(false);
+    upComingOffSet.current += 4;
   }
 
   const handleScroll = () => {
-    const isBottomReached =
+    setIsBottomPageReached(
       Math.ceil(window.innerHeight + window.scrollY) >=
-      document.documentElement.scrollHeight;
-    if (isBottomReached) {
-      console.log('caiu aqui');
-      getLaunches(true);
+        document.documentElement.scrollHeight,
+    );
+  };
+
+  function getQueryParams(isPastLaunch: boolean) {
+    let params: object = {};
+
+    params = {
+      ...{ ...params, upcoming: !isPastLaunch },
+      ...(pastStartDate &&
+        pastLastDate && {
+          ...params,
+          date_utc: { $gte: pastStartDate, $lte: pastLastDate },
+        }),
+      ...(pastStartDate &&
+        !pastLastDate && { ...params, date_utc: { $gte: pastStartDate } }),
+      ...(!pastStartDate &&
+        pastLastDate && { ...params, date_utc: { $lte: pastLastDate } }),
+      ...(comboBoxPastSelectedValue === '1' && { ...params, success: true }),
+      ...(comboBoxPastSelectedValue === '2' && { ...params, success: false }),
+    };
+
+    return params;
+  }
+
+  const clearFilters = () => {
+    if (tabIndex === 0) {
+      setPastStartDate(null);
+      setPastLastDate(null);
+      setComboBoxPastSelectedValue('');
+    } else {
+      setUpComingStartDate(null);
+      setUpComingLastDate(null);
+      setComboBoxUpComingSelectedValue('');
     }
   };
 
@@ -168,7 +232,12 @@ export default function Home() {
     <Box>
       <Header />
       <Box mt={5}>
-        <Tabs align="center" variant="soft-rounded" size={'lg'}>
+        <Tabs
+          onChange={index => setTabIndex(index)}
+          align="center"
+          variant="soft-rounded"
+          size={'lg'}
+        >
           <TabList>
             <Tab>Past</Tab>
             <Tab>Upcoming</Tab>
@@ -182,18 +251,18 @@ export default function Home() {
                 <DatePicker
                   placeholderText="From"
                   customInput={<Input />}
-                  selected={startDate}
-                  onChange={date => setStartDate(date)}
+                  selected={pastStartDate}
+                  onChange={date => setPastStartDate(date)}
                 />
                 <DatePicker
                   placeholderText="To"
                   customInput={<Input />}
-                  selected={lastDate}
-                  onChange={date => setLastDate(date)}
+                  selected={pastLastDate}
+                  onChange={date => setPastLastDate(date)}
                 />
                 <Select
                   size={'md'}
-                  value={comboBoxSelectedValue}
+                  value={comboBoxPastSelectedValue}
                   onChange={event => {
                     handleMissionStatusValue(event);
                   }}
@@ -207,14 +276,26 @@ export default function Home() {
                   <Button
                     onClick={() => {
                       setIsLoading(true);
-                      getLaunches();
+                      setIsAppyFilterButtonPressed(true);
+                      setPastLaunchesData([]);
+                      pastOffSet.current = 0;
                     }}
                     isLoading={isLoading}
                     colorScheme="blue"
                   >
                     Apply
                   </Button>
-                  <Button isLoading={isLoading} colorScheme="blue">
+                  <Button
+                    onClick={() => {
+                      setIsLoading(true);
+                      setIsClearFilterButtonPressed(true);
+                      setPastLaunchesData([]);
+                      clearFilters();
+                      pastOffSet.current = 0;
+                    }}
+                    isLoading={isLoading}
+                    colorScheme="blue"
+                  >
                     Clear
                   </Button>
                 </HStack>
@@ -228,10 +309,10 @@ export default function Home() {
                   justifyContent="center"
                   gap={2}
                 >
-                  {launchesData?.map(launch =>
+                  {pastLaunchesData?.map(launch =>
                     launch?.docs?.map(docs => (
                       <Box
-                        key={launch.id}
+                        key={docs.id}
                         display="flex"
                         flexDirection={'row'}
                         maxW="md"
@@ -254,7 +335,7 @@ export default function Home() {
                           <Box mt="1" fontWeight="semibold" isTruncated>
                             Launch Number: {docs.flight_number}
                           </Box>
-                          <Text  mt="1" fontWeight="semibold" isTruncated>
+                          <Text mt="1" fontWeight="semibold" isTruncated>
                             Mission name: {docs.name.slice(0, 10)}
                           </Text>
                           <Box mt="1" fontWeight="semibold" isTruncated>
@@ -273,7 +354,11 @@ export default function Home() {
                               fontWeight="semibold"
                               isTruncated
                             >
-                              {docs.success === true ? 'Success' : 'Failure'}
+                              {docs.success === true
+                                ? 'Success'
+                                : docs.success === false
+                                ? 'Failure'
+                                : ''}
                             </Text>
                           </HStack>
                         </VStack>
@@ -284,77 +369,129 @@ export default function Home() {
               </Box>
             </TabPanel>
             <TabPanel>
-              <Box pl={6} mt={6}>
+            <Box pl={6} mt={6}>
                 <Text fontSize={'16px'}>Filters</Text>
               </Box>
               <HStack width={'70%'} paddingX={6} mt={2}>
                 <DatePicker
                   placeholderText="From"
                   customInput={<Input />}
-                  selected={startDate}
-                  onChange={date => setStartDate(date)}
+                  selected={upComingStartDate}
+                  onChange={date => setUpComingStartDate(date)}
                 />
                 <DatePicker
                   placeholderText="To"
                   customInput={<Input />}
-                  selected={lastDate}
-                  onChange={date => setLastDate(date)}
+                  selected={upComingLastDate}
+                  onChange={date => setUpComingLastDate(date)}
                 />
                 <Select
                   size={'md'}
-                  value={comboBoxSelectedValue}
+                  value={comboBoxUpComingSelectedValue}
                   onChange={event => {
                     handleMissionStatusValue(event);
                   }}
                   placeholder="Select a mission status"
                 >
-                  <option value={'1'}>Success</option>
-                  <option value={'2'}>Failure</option>
+                  <option value={'1'}>Successful</option>
+                  <option value={'2'}>Failed</option>
                   <option value={'3'}>All</option>
                 </Select>
                 <HStack>
-                  <Button isLoading={isLoading} colorScheme="blue">
+                  <Button
+                    onClick={() => {
+                      setIsLoading(true);
+                      setIsAppyFilterButtonPressed(true);
+                      setUpcomingLaunchesData([]);
+                      upComingOffSet.current = 0;
+                    }}
+                    isLoading={isLoading}
+                    colorScheme="blue"
+                  >
                     Apply
                   </Button>
-                  <Button isLoading={isLoading} colorScheme="blue">
+                  <Button
+                    onClick={() => {
+                      setIsLoading(true);
+                      setIsClearFilterButtonPressed(true);
+                      setUpcomingLaunchesData([]);
+                      clearFilters();
+                      upComingOffSet.current = 0;
+                      getUpcomingLaunches();
+                    }}
+                    isLoading={isLoading}
+                    colorScheme="blue"
+                  >
                     Clear
                   </Button>
                 </HStack>
               </HStack>
-              <Box
-                display="flex"
-                flexDirection={'row'}
-                maxW="sm"
-                borderWidth="1px"
-                borderRadius="lg"
-                alignItems="center"
-                justifyContent="center"
-                p={4}
-                mt={6}
-              >
-                {/* <Image
-                  w="125px"
-                  h="125px"
-                  src={property.imageUrl}
-                  alt={property.imageAlt}
-                /> */}
-                <VStack pl={3} spacing={1}>
-                  <Box mt="1" fontWeight="semibold" isTruncated>
-                    Launch Number: 1
-                  </Box>
-                  <Box mt="1" fontWeight="semibold" isTruncated>
-                    Mission name: FalconSat
-                  </Box>
-                  <Box mt="1" fontWeight="semibold" isTruncated>
-                    Date: 01/28/2022
-                  </Box>
-                  <Box mt="1" fontWeight="semibold" isTruncated>
-                    Rocket name: Falcon 1
-                  </Box>
-                  <Box mt="1" fontWeight="semibold" isTruncated>
-                    Mission status: failure
-                  </Box>
-                </VStack>
+              <Box width="50%">
+                <Grid
+                  mt={5}
+                  templateColumns={['repeat(1, 1fr)', 'repeat(2, 1fr)']}
+                  templateRows="repeat(2, 1fr)"
+                  alignItems="center"
+                  justifyContent="center"
+                  gap={2}
+                >
+                  {upComingLaunchesData?.map(launch =>
+                    launch?.docs?.map(docs => (
+                      <Box
+                        key={docs.id}
+                        display="flex"
+                        flexDirection={'row'}
+                        maxW="md"
+                        borderWidth="1px"
+                        borderRadius="lg"
+                        alignItems="center"
+                        justifyContent="center"
+                        spacing={6}
+                        p={4}
+                      >
+                        <Image
+                          w="125px"
+                          h="125px"
+                          src={docs.links.patch.small}
+                          alt={docs.links.patch.alt}
+                          p={4}
+                          mr={2}
+                        />
+                        <VStack p={3} spacing={2}>
+                          <Box mt="1" fontWeight="semibold" isTruncated>
+                            Launch Number: {docs.flight_number}
+                          </Box>
+                          <Text mt="1" fontWeight="semibold" isTruncated>
+                            Mission name: {docs.name.slice(0, 10)}
+                          </Text>
+                          <Box mt="1" fontWeight="semibold" isTruncated>
+                            Year: {docs.year}
+                          </Box>
+                          <Box mt="1" fontWeight="semibold" isTruncated>
+                            Rocket name: {docs.rocket_name}
+                          </Box>
+                          <HStack alignItems={'center'}>
+                            <Text fontWeight="semibold" isTruncated>
+                              Mission status:
+                            </Text>
+                            <Text
+                              mt="4"
+                              color={docs.success === true ? 'green' : 'red'}
+                              fontWeight="semibold"
+                              isTruncated
+                            >
+                              {docs.success === true
+                                ? 'Success' 
+                                : docs.success === false
+                                ? 'Failure'
+                                : ''}
+                            </Text>
+                          </HStack>
+                        </VStack>
+                      </Box>
+                    )),
+                  )}
+                </Grid>
               </Box>
             </TabPanel>
           </TabPanels>
