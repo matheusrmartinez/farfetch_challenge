@@ -15,6 +15,7 @@ import {
   VStack,
   Button,
   Grid,
+  useBreakpointValue
 } from '@chakra-ui/react';
 import { useEffect, useRef, useState } from 'react';
 import Header from '../components/Header';
@@ -22,6 +23,9 @@ import DatePicker from 'react-datepicker';
 import { api } from '../services/api';
 import { getYear, parseISO } from 'date-fns';
 import ClipLoader from 'react-spinners/ClipLoader';
+import LaunchCard from '../components/LaunchCard';
+import { parseCookies } from 'nookies';
+import { cloneDeep } from 'lodash';
 
 interface LaunchesData {
   docs: {
@@ -42,6 +46,10 @@ interface LaunchesData {
   }[];
   hasNextPage: boolean;
 }
+export interface SelectedIcon {
+  flightId: string;
+  color: string;
+}
 
 export default function Home() {
   const [comboBoxPastSelectedValue, setComboBoxPastSelectedValue] =
@@ -56,6 +64,12 @@ export default function Home() {
   const [upComingLaunchesData, setUpcomingLaunchesData] = useState<
     LaunchesData[]
   >([] as LaunchesData[]);
+  const [favoriteLaunchesData, setFavoriteLaunchesData] = useState<
+    LaunchesData[]
+  >([] as LaunchesData[]);
+  const [allLaunchesData, setAllLaunchesData] = useState<LaunchesData[]>(
+    [] as LaunchesData[],
+  );
   const [pastStartDate, setPastStartDate] = useState<Date>();
   const [pastLastDate, setPastLastDate] = useState<Date>();
   const [upComingStartDate, setUpComingStartDate] = useState<Date>();
@@ -69,13 +83,32 @@ export default function Home() {
   const [tabIndex, setTabIndex] = useState(0);
   const pastOffSet = useRef(0);
   const upComingOffSet = useRef(0);
+  
+  const isWideVersion = useBreakpointValue({
+    lg: true,
+    base: false
+  });
+
+  const [selectedIcons, setSelectedIcons] = useState(() => {
+    {
+      const cookies = parseCookies();
+
+      return (
+        Object.keys(cookies)?.map(key => {
+          return {
+            flightId: key,
+            color: 'yellow.300',
+          };
+        }) || []
+      );
+    }
+  });
 
   useEffect(() => {
+
     getPastLaunches();
     getUpcomingLaunches();
-  }, []);
 
-  useEffect(() => {
     window.addEventListener('scroll', handleScroll, {
       passive: true,
     });
@@ -84,6 +117,14 @@ export default function Home() {
       window.removeEventListener('scroll', handleScroll);
     };
   }, []);
+
+  useEffect(() => {
+    let pastLaunches: LaunchesData[] = cloneDeep(pastLaunchesData);
+    let upComingLaunches: LaunchesData[] = cloneDeep(upComingLaunchesData);
+    let allData = pastLaunches.concat(upComingLaunches);
+
+    setAllLaunchesData(allData);
+  }, [upComingLaunchesData, pastLaunchesData]);
 
   useEffect(() => {
     if (isBottomPageReached) {
@@ -96,6 +137,22 @@ export default function Home() {
       tabIndex === 0 ? getPastLaunches() : getUpcomingLaunches();
     }
   }, [isAppyFilterButtonPressed, isClearFilterButtonPressed]);
+
+  useEffect(() => {
+    if (!allLaunchesData || allLaunchesData.length === 0 || favoriteLaunchesData.length > 0) return;
+    const cookies = parseCookies();
+    const keys = Object.keys(cookies);
+
+    let favorite: LaunchesData = { docs: [], hasNextPage: false };
+
+    keys?.forEach(key => {
+      allLaunchesData.forEach(launch => {
+        favorite.docs.push(launch.docs?.find(doc => doc?.id === key));
+      });
+    });
+
+    setFavoriteLaunchesData([favorite]);
+  }, [allLaunchesData]);
 
   const handleMissionStatusValue = (
     event: React.ChangeEvent<HTMLSelectElement>,
@@ -152,7 +209,6 @@ export default function Home() {
   }
 
   async function getUpcomingLaunches() {
-    console.log('caiu')
     let launches: LaunchesData;
 
     const params = {
@@ -228,6 +284,16 @@ export default function Home() {
     }
   };
 
+  function isIconSelected(flightId: string) {
+    const cookies = parseCookies();
+    return Object.keys(cookies).some(key => key === flightId);
+  }
+
+  const getIconColor = (docId: string) => {
+    let iconIndex = selectedIcons.findIndex(icon => icon.flightId === docId);
+    return selectedIcons[iconIndex]?.color ?? 'gray.300';
+  };
+
   return (
     <Box>
       <Header />
@@ -241,13 +307,15 @@ export default function Home() {
           <TabList>
             <Tab>Past</Tab>
             <Tab>Upcoming</Tab>
+            <Tab>Favorites</Tab>
           </TabList>
           <TabPanels>
             <TabPanel>
               <Box pl={6} mt={6}>
                 <Text fontSize={'16px'}>Filters</Text>
               </Box>
-              <HStack width={'70%'} paddingX={6} mt={2}>
+              {isWideVersion ? (
+              <HStack width={'64.1%'} paddingX={6} mt={2}>
                 <DatePicker
                   placeholderText="From"
                   customInput={<Input />}
@@ -300,7 +368,62 @@ export default function Home() {
                   </Button>
                 </HStack>
               </HStack>
-              <Box width="50%">
+              ) : (
+                <VStack width={'90%'} paddingX={6} mt={2}>
+                <DatePicker
+                  placeholderText="From"
+                  customInput={<Input />}
+                  selected={pastStartDate}
+                  onChange={date => setPastStartDate(date)}
+                />
+                <DatePicker
+                  placeholderText="To"
+                  customInput={<Input />}
+                  selected={pastLastDate}
+                  onChange={date => setPastLastDate(date)}
+                />
+                <Select
+                  size={'md'}
+                  value={comboBoxPastSelectedValue}
+                  onChange={event => {
+                    handleMissionStatusValue(event);
+                  }}
+                  placeholder="Select a mission status"
+                >
+                  <option value={'1'}>Successful</option>
+                  <option value={'2'}>Failed</option>
+                  <option value={'3'}>All</option>
+                </Select>
+                <HStack>
+                  <Button
+                    onClick={() => {
+                      setIsLoading(true);
+                      setIsAppyFilterButtonPressed(true);
+                      setPastLaunchesData([]);
+                      pastOffSet.current = 0;
+                    }}
+                    isLoading={isLoading}
+                    colorScheme="blue"
+                  >
+                    Apply
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      setIsLoading(true);
+                      setIsClearFilterButtonPressed(true);
+                      setPastLaunchesData([]);
+                      clearFilters();
+                      pastOffSet.current = 0;
+                    }}
+                    isLoading={isLoading}
+                    colorScheme="blue"
+                  >
+                    Clear
+                  </Button>
+                </HStack>
+              </VStack>
+              )}
+              <Box width="66.25%">
                 <Grid
                   mt={5}
                   templateColumns={['repeat(1, 1fr)', 'repeat(2, 1fr)']}
@@ -308,71 +431,28 @@ export default function Home() {
                   alignItems="center"
                   justifyContent="center"
                   gap={2}
+                  mx={10}
                 >
                   {pastLaunchesData?.map(launch =>
                     launch?.docs?.map(docs => (
-                      <Box
-                        key={docs.id}
-                        display="flex"
-                        flexDirection={'row'}
-                        maxW="md"
-                        borderWidth="1px"
-                        borderRadius="lg"
-                        alignItems="center"
-                        justifyContent="center"
-                        spacing={6}
-                        p={4}
-                      >
-                        <Image
-                          w="125px"
-                          h="125px"
-                          src={docs.links.patch.small}
-                          alt={docs.links.patch.alt}
-                          p={4}
-                          mr={2}
-                        />
-                        <VStack p={3} spacing={2}>
-                          <Box mt="1" fontWeight="semibold" isTruncated>
-                            Launch Number: {docs.flight_number}
-                          </Box>
-                          <Text mt="1" fontWeight="semibold" isTruncated>
-                            Mission name: {docs.name.slice(0, 10)}
-                          </Text>
-                          <Box mt="1" fontWeight="semibold" isTruncated>
-                            Year: {docs.year}
-                          </Box>
-                          <Box mt="1" fontWeight="semibold" isTruncated>
-                            Rocket name: {docs.rocket_name}
-                          </Box>
-                          <HStack alignItems={'center'}>
-                            <Text fontWeight="semibold" isTruncated>
-                              Mission status:
-                            </Text>
-                            <Text
-                              mt="4"
-                              color={docs.success === true ? 'green' : 'red'}
-                              fontWeight="semibold"
-                              isTruncated
-                            >
-                              {docs.success === true
-                                ? 'Success'
-                                : docs.success === false
-                                ? 'Failure'
-                                : ''}
-                            </Text>
-                          </HStack>
-                        </VStack>
-                      </Box>
+                      <LaunchCard
+                        key={docs?.id}
+                        isIconSelected={isIconSelected}
+                        getIconColor={getIconColor}
+                        setSelectedIcons={setSelectedIcons}
+                        selectedIcons={selectedIcons}
+                        docs={docs}
+                      />
                     )),
                   )}
                 </Grid>
               </Box>
             </TabPanel>
             <TabPanel>
-            <Box pl={6} mt={6}>
+              <Box pl={6} mt={6}>
                 <Text fontSize={'16px'}>Filters</Text>
               </Box>
-              <HStack width={'70%'} paddingX={6} mt={2}>
+              <Box flexDirection={['column', 'row']}  width={'70%'} paddingX={6} mt={2}>
                 <DatePicker
                   placeholderText="From"
                   customInput={<Input />}
@@ -425,8 +505,8 @@ export default function Home() {
                     Clear
                   </Button>
                 </HStack>
-              </HStack>
-              <Box width="50%">
+              </Box>
+              <Box width="66.5%">
                 <Grid
                   mt={5}
                   templateColumns={['repeat(1, 1fr)', 'repeat(2, 1fr)']}
@@ -437,58 +517,39 @@ export default function Home() {
                 >
                   {upComingLaunchesData?.map(launch =>
                     launch?.docs?.map(docs => (
-                      <Box
-                        key={docs.id}
-                        display="flex"
-                        flexDirection={'row'}
-                        maxW="md"
-                        borderWidth="1px"
-                        borderRadius="lg"
-                        alignItems="center"
-                        justifyContent="center"
-                        spacing={6}
-                        p={4}
-                      >
-                        <Image
-                          w="125px"
-                          h="125px"
-                          src={docs.links.patch.small}
-                          alt={docs.links.patch.alt}
-                          p={4}
-                          mr={2}
-                        />
-                        <VStack p={3} spacing={2}>
-                          <Box mt="1" fontWeight="semibold" isTruncated>
-                            Launch Number: {docs.flight_number}
-                          </Box>
-                          <Text mt="1" fontWeight="semibold" isTruncated>
-                            Mission name: {docs.name.slice(0, 10)}
-                          </Text>
-                          <Box mt="1" fontWeight="semibold" isTruncated>
-                            Year: {docs.year}
-                          </Box>
-                          <Box mt="1" fontWeight="semibold" isTruncated>
-                            Rocket name: {docs.rocket_name}
-                          </Box>
-                          <HStack alignItems={'center'}>
-                            <Text fontWeight="semibold" isTruncated>
-                              Mission status:
-                            </Text>
-                            <Text
-                              mt="4"
-                              color={docs.success === true ? 'green' : 'red'}
-                              fontWeight="semibold"
-                              isTruncated
-                            >
-                              {docs.success === true
-                                ? 'Success' 
-                                : docs.success === false
-                                ? 'Failure'
-                                : ''}
-                            </Text>
-                          </HStack>
-                        </VStack>
-                      </Box>
+                      <LaunchCard
+                        key={docs?.id}
+                        isIconSelected={isIconSelected}
+                        getIconColor={getIconColor}
+                        setSelectedIcons={setSelectedIcons}
+                        selectedIcons={selectedIcons}
+                        docs={docs}
+                      />
+                    )),
+                  )}
+                </Grid>
+              </Box>
+            </TabPanel>
+            <TabPanel>
+              <Box width="66.5%">
+                <Grid
+                  mt={5}
+                  templateColumns={['repeat(1, 1fr)', 'repeat(2, 1fr)']}
+                  templateRows="repeat(2, 1fr)"
+                  alignItems="center"
+                  justifyContent="center"
+                  gap={2}
+                >
+                  {favoriteLaunchesData?.map(launch =>
+                    launch?.docs?.map(docs => (
+                      <LaunchCard
+                        key={docs?.id}
+                        isIconSelected={isIconSelected}
+                        getIconColor={getIconColor}
+                        setSelectedIcons={setSelectedIcons}
+                        selectedIcons={selectedIcons}
+                        docs={docs}
+                      />
                     )),
                   )}
                 </Grid>
