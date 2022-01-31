@@ -54,22 +54,22 @@ export default function LaunchCard({
       spacing={6}
       p={4}
     >
-      <VStack mr={[1, 12]}>
+      <VStack mr={[1, 10]} >
         <Image
-          w="125px"
-          h="125px"
           src={docs?.links?.patch?.small}
           alt={docs?.links?.patch?.alt}
           p={2}
+          boxSize="125px"
+          mr={8}
         />
         <HStack>
           <Badge borderRadius='full' px='3' py={0.5} colorScheme="green">{docs?.year}</Badge>
           <Badge borderRadius='full' px='3' py= {0.5} colorScheme={docs?.success === true ? 'green' : 'red'}>
-            {docs?.success === true ? 'Success' : 'Failure'}
+            {docs?.success === true ? 'Successful' : 'Failed'}
           </Badge>
         </HStack>
       </VStack>
-      <VStack justifyContent="left" align="flex-end"  >
+      <VStack w="45%" align="flex-end"  >
         <Box mt={-5} mb={5}>
         <IconButton
           aria-label="Search database"
@@ -94,11 +94,11 @@ export default function LaunchCard({
         <Box mt="1" fontWeight="semibold" isTruncated>
           Launch Number: {docs?.flight_number}
         </Box>
-        <Text mt="1" fontWeight="semibold" isTruncated>
-          Mission name: {docs?.name.slice(0, 10)}
+        <Text mt="1" noOfLines={2} fontWeight="semibold">
+          Mission: {docs?.name.slice(0,12)}
         </Text>
         <Box mt="1" fontWeight="semibold" isTruncated>
-          Rocket name: {docs?.rocket_name}
+          Rocket: {docs?.rocket_name}
         </Box>
       </VStack>
     </Box>

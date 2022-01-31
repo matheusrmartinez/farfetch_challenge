@@ -15,7 +15,10 @@ import {
   VStack,
   Button,
   Grid,
-  useBreakpointValue
+  useBreakpointValue,
+  Link,
+  IconButton,
+  Spinner,
 } from '@chakra-ui/react';
 import { useEffect, useRef, useState } from 'react';
 import Header from '../components/Header';
@@ -26,6 +29,8 @@ import ClipLoader from 'react-spinners/ClipLoader';
 import LaunchCard from '../components/LaunchCard';
 import { parseCookies } from 'nookies';
 import { cloneDeep } from 'lodash';
+import { ArrowUpIcon } from '@chakra-ui/icons';
+import { ThreeDots } from 'react-loader-spinner';
 
 interface LaunchesData {
   docs: {
@@ -56,8 +61,7 @@ export default function Home() {
     useState('');
   const [comboBoxUpComingSelectedValue, setComboBoxUpComingSelectedValue] =
     useState('');
-  let [loading, setLoading] = useState(true);
-  let [color, setColor] = useState('#ffffff');
+  const [isLoading, setIsLoading] = useState(false);
   const [pastLaunchesData, setPastLaunchesData] = useState<LaunchesData[]>(
     [] as LaunchesData[],
   );
@@ -78,16 +82,16 @@ export default function Home() {
     useState(false);
   const [isClearFilterButtonPressed, setIsClearFilterButtonPressed] =
     useState(false);
-  const [isLoading, setIsLoading] = useState(false);
   const [isBottomPageReached, setIsBottomPageReached] = useState(false);
   const [tabIndex, setTabIndex] = useState(0);
   const pastOffSet = useRef(0);
   const upComingOffSet = useRef(0);
-  
-  const isWideVersion = useBreakpointValue({
-    lg: true,
-    base: false
-  });
+  const [scrollPosition, setScrollPosition] = useState(0);
+
+  // const isWideVersion = useBreakpointValue({
+  //   lg: true,
+  //   base: false,
+  // });
 
   const [selectedIcons, setSelectedIcons] = useState(() => {
     {
@@ -105,13 +109,10 @@ export default function Home() {
   });
 
   useEffect(() => {
-
     getPastLaunches();
     getUpcomingLaunches();
 
-    window.addEventListener('scroll', handleScroll, {
-      passive: true,
-    });
+    window.addEventListener('scroll', handleScroll, { passive: true });
 
     return () => {
       window.removeEventListener('scroll', handleScroll);
@@ -139,7 +140,12 @@ export default function Home() {
   }, [isAppyFilterButtonPressed, isClearFilterButtonPressed]);
 
   useEffect(() => {
-    if (!allLaunchesData || allLaunchesData.length === 0 || favoriteLaunchesData.length > 0) return;
+    if (
+      !allLaunchesData ||
+      allLaunchesData.length === 0 ||
+      favoriteLaunchesData.length > 0
+    )
+      return;
     const cookies = parseCookies();
     const keys = Object.keys(cookies);
 
@@ -174,6 +180,8 @@ export default function Home() {
   }
 
   async function getPastLaunches() {
+    setIsLoading(true);
+
     let launches: LaunchesData = {} as LaunchesData;
 
     const params = {
@@ -189,6 +197,8 @@ export default function Home() {
     launches = response.data;
 
     const launchesUpdated = await getRocketName(launches);
+
+    setIsLoading(false);
 
     let launchesFormatted = {
       docs: launchesUpdated.docs.map(launch => {
@@ -209,6 +219,8 @@ export default function Home() {
   }
 
   async function getUpcomingLaunches() {
+
+    setIsLoading(true);
     let launches: LaunchesData;
 
     const params = {
@@ -225,6 +237,8 @@ export default function Home() {
     launches = response.data;
 
     const launchesUpdated = await getRocketName(launches);
+
+    setIsLoading(false);
 
     let launchesFormatted = {
       docs: launchesUpdated.docs.map(launch => {
@@ -249,6 +263,9 @@ export default function Home() {
       Math.ceil(window.innerHeight + window.scrollY) >=
         document.documentElement.scrollHeight,
     );
+
+    const position = window.pageYOffset;
+    setScrollPosition(position);
   };
 
   function getQueryParams(isPastLaunch: boolean) {
@@ -294,6 +311,24 @@ export default function Home() {
     return selectedIcons[iconIndex]?.color ?? 'gray.300';
   };
 
+  const Spinner = () => (
+    isLoading && (
+      <Link href="/#top">
+        <Box
+          position="fixed"
+          bottom="20px"
+          right={['16px', '730px']}
+          zIndex={1}
+          justifyContent="center"
+          flex={1}
+          size="md"
+        >
+          <ThreeDots color="black" visible={isLoading} />
+        </Box>
+      </Link>
+    )
+  )
+
   return (
     <Box>
       <Header />
@@ -314,7 +349,6 @@ export default function Home() {
               <Box pl={6} mt={6}>
                 <Text fontSize={'16px'}>Filters</Text>
               </Box>
-              {isWideVersion ? (
               <HStack width={'64.1%'} paddingX={6} mt={2}>
                 <DatePicker
                   placeholderText="From"
@@ -368,61 +402,115 @@ export default function Home() {
                   </Button>
                 </HStack>
               </HStack>
+              {/* {isWideVersion ? (
+                <HStack width={'64.1%'} paddingX={6} mt={2}>
+                  <DatePicker
+                    placeholderText="From"
+                    customInput={<Input />}
+                    selected={pastStartDate}
+                    onChange={date => setPastStartDate(date)}
+                  />
+                  <DatePicker
+                    placeholderText="To"
+                    customInput={<Input />}
+                    selected={pastLastDate}
+                    onChange={date => setPastLastDate(date)}
+                  />
+                  <Select
+                    size={'md'}
+                    value={comboBoxPastSelectedValue}
+                    onChange={event => {
+                      handleMissionStatusValue(event);
+                    }}
+                    placeholder="Select a mission status"
+                  >
+                    <option value={'1'}>Successful</option>
+                    <option value={'2'}>Failed</option>
+                    <option value={'3'}>All</option>
+                  </Select>
+                  <HStack>
+                    <Button
+                      onClick={() => {
+                        setIsLoading(true);
+                        setIsAppyFilterButtonPressed(true);
+                        setPastLaunchesData([]);
+                        pastOffSet.current = 0;
+                      }}
+                      isLoading={isLoading}
+                      colorScheme="blue"
+                    >
+                      Apply
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        setIsLoading(true);
+                        setIsClearFilterButtonPressed(true);
+                        setPastLaunchesData([]);
+                        clearFilters();
+                        pastOffSet.current = 0;
+                      }}
+                      isLoading={isLoading}
+                      colorScheme="blue"
+                    >
+                      Clear
+                    </Button>
+                  </HStack>
+                </HStack>
               ) : (
                 <VStack width={'90%'} paddingX={6} mt={2}>
-                <DatePicker
-                  placeholderText="From"
-                  customInput={<Input />}
-                  selected={pastStartDate}
-                  onChange={date => setPastStartDate(date)}
-                />
-                <DatePicker
-                  placeholderText="To"
-                  customInput={<Input />}
-                  selected={pastLastDate}
-                  onChange={date => setPastLastDate(date)}
-                />
-                <Select
-                  size={'md'}
-                  value={comboBoxPastSelectedValue}
-                  onChange={event => {
-                    handleMissionStatusValue(event);
-                  }}
-                  placeholder="Select a mission status"
-                >
-                  <option value={'1'}>Successful</option>
-                  <option value={'2'}>Failed</option>
-                  <option value={'3'}>All</option>
-                </Select>
-                <HStack>
-                  <Button
-                    onClick={() => {
-                      setIsLoading(true);
-                      setIsAppyFilterButtonPressed(true);
-                      setPastLaunchesData([]);
-                      pastOffSet.current = 0;
+                  <DatePicker
+                    placeholderText="From"
+                    customInput={<Input />}
+                    selected={pastStartDate}
+                    onChange={date => setPastStartDate(date)}
+                  />
+                  <DatePicker
+                    placeholderText="To"
+                    customInput={<Input />}
+                    selected={pastLastDate}
+                    onChange={date => setPastLastDate(date)}
+                  />
+                  <Select
+                    size={'md'}
+                    value={comboBoxPastSelectedValue}
+                    onChange={event => {
+                      handleMissionStatusValue(event);
                     }}
-                    isLoading={isLoading}
-                    colorScheme="blue"
+                    placeholder="Select a mission status"
                   >
-                    Apply
-                  </Button>
-                  <Button
-                    onClick={() => {
-                      setIsLoading(true);
-                      setIsClearFilterButtonPressed(true);
-                      setPastLaunchesData([]);
-                      clearFilters();
-                      pastOffSet.current = 0;
-                    }}
-                    isLoading={isLoading}
-                    colorScheme="blue"
-                  >
-                    Clear
-                  </Button>
-                </HStack>
-              </VStack>
-              )}
+                    <option value={'1'}>Successful</option>
+                    <option value={'2'}>Failed</option>
+                    <option value={'3'}>All</option>
+                  </Select>
+                  <HStack>
+                    <Button
+                      onClick={() => {
+                        setIsLoading(true);
+                        setIsAppyFilterButtonPressed(true);
+                        setPastLaunchesData([]);
+                        pastOffSet.current = 0;
+                      }}
+                      isLoading={isLoading}
+                      colorScheme="blue"
+                    >
+                      Apply
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        setIsLoading(true);
+                        setIsClearFilterButtonPressed(true);
+                        setPastLaunchesData([]);
+                        clearFilters();
+                        pastOffSet.current = 0;
+                      }}
+                      isLoading={isLoading}
+                      colorScheme="blue"
+                    >
+                      Clear
+                    </Button>
+                  </HStack>
+                </VStack>
+              )} */}
               <Box width="66.25%">
                 <Grid
                   mt={5}
@@ -432,6 +520,7 @@ export default function Home() {
                   justifyContent="center"
                   gap={2}
                   mx={10}
+                  mb={200}
                 >
                   {pastLaunchesData?.map(launch =>
                     launch?.docs?.map(docs => (
@@ -452,7 +541,7 @@ export default function Home() {
               <Box pl={6} mt={6}>
                 <Text fontSize={'16px'}>Filters</Text>
               </Box>
-              <Box flexDirection={['column', 'row']}  width={'70%'} paddingX={6} mt={2}>
+              <HStack width={'64.1%'} paddingX={6} mt={2}>
                 <DatePicker
                   placeholderText="From"
                   customInput={<Input />}
@@ -505,8 +594,119 @@ export default function Home() {
                     Clear
                   </Button>
                 </HStack>
-              </Box>
-              <Box width="66.5%">
+              </HStack>
+              {/* {isWideVersion ? (
+                <HStack width={'64.1%'} paddingX={6} mt={2}>
+                  <DatePicker
+                    placeholderText="From"
+                    customInput={<Input />}
+                    selected={upComingStartDate}
+                    onChange={date => setUpComingStartDate(date)}
+                  />
+                  <DatePicker
+                    placeholderText="To"
+                    customInput={<Input />}
+                    selected={upComingLastDate}
+                    onChange={date => setUpComingLastDate(date)}
+                  />
+                  <Select
+                    size={'md'}
+                    value={comboBoxUpComingSelectedValue}
+                    onChange={event => {
+                      handleMissionStatusValue(event);
+                    }}
+                    placeholder="Select a mission status"
+                  >
+                    <option value={'1'}>Successful</option>
+                    <option value={'2'}>Failed</option>
+                    <option value={'3'}>All</option>
+                  </Select>
+                  <HStack>
+                    <Button
+                      onClick={() => {
+                        setIsLoading(true);
+                        setIsAppyFilterButtonPressed(true);
+                        setUpcomingLaunchesData([]);
+                        upComingOffSet.current = 0;
+                      }}
+                      isLoading={isLoading}
+                      colorScheme="blue"
+                    >
+                      Apply
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        setIsLoading(true);
+                        setIsClearFilterButtonPressed(true);
+                        setUpcomingLaunchesData([]);
+                        clearFilters();
+                        upComingOffSet.current = 0;
+                        getUpcomingLaunches();
+                      }}
+                      isLoading={isLoading}
+                      colorScheme="blue"
+                    >
+                      Clear
+                    </Button>
+                  </HStack>
+                </HStack>
+              ) : (
+                <VStack width={'90%'} paddingX={6} mt={2}>
+                  <DatePicker
+                    placeholderText="From"
+                    customInput={<Input />}
+                    selected={upComingStartDate}
+                    onChange={date => setUpComingStartDate(date)}
+                  />
+                  <DatePicker
+                    placeholderText="To"
+                    customInput={<Input />}
+                    selected={upComingLastDate}
+                    onChange={date => setUpComingLastDate(date)}
+                  />
+                  <Select
+                    size={'md'}
+                    value={comboBoxUpComingSelectedValue}
+                    onChange={event => {
+                      handleMissionStatusValue(event);
+                    }}
+                    placeholder="Select a mission status"
+                  >
+                    <option value={'1'}>Successful</option>
+                    <option value={'2'}>Failed</option>
+                    <option value={'3'}>All</option>
+                  </Select>
+                  <HStack>
+                    <Button
+                      onClick={() => {
+                        setIsLoading(true);
+                        setIsAppyFilterButtonPressed(true);
+                        setUpcomingLaunchesData([]);
+                        upComingOffSet.current = 0;
+                      }}
+                      isLoading={isLoading}
+                      colorScheme="blue"
+                    >
+                      Apply
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        setIsLoading(true);
+                        setIsClearFilterButtonPressed(true);
+                        setUpcomingLaunchesData([]);
+                        clearFilters();
+                        upComingOffSet.current = 0;
+                        getUpcomingLaunches();
+                      }}
+                      isLoading={isLoading}
+                      colorScheme="blue"
+                    >
+                      Clear
+                    </Button>
+                  </HStack>
+                </VStack>
+              )} */}
+              <Box width="66.25%">
                 <Grid
                   mt={5}
                   templateColumns={['repeat(1, 1fr)', 'repeat(2, 1fr)']}
@@ -514,6 +714,8 @@ export default function Home() {
                   alignItems="center"
                   justifyContent="center"
                   gap={2}
+                  mx={10}
+                  mb={200}
                 >
                   {upComingLaunchesData?.map(launch =>
                     launch?.docs?.map(docs => (
@@ -530,8 +732,8 @@ export default function Home() {
                 </Grid>
               </Box>
             </TabPanel>
-            <TabPanel>
-              <Box width="66.5%">
+            {/* <TabPanel>
+              <Box width="66.25%">
                 <Grid
                   mt={5}
                   templateColumns={['repeat(1, 1fr)', 'repeat(2, 1fr)']}
@@ -539,6 +741,8 @@ export default function Home() {
                   alignItems="center"
                   justifyContent="center"
                   gap={2}
+                  mx={10}
+                  mb={200}
                 >
                   {favoriteLaunchesData?.map(launch =>
                     launch?.docs?.map(docs => (
@@ -554,11 +758,27 @@ export default function Home() {
                   )}
                 </Grid>
               </Box>
-            </TabPanel>
+            </TabPanel> */}
           </TabPanels>
         </Tabs>
       </Box>
-      <ClipLoader color={color} loading={loading} size={150} />
+      <Spinner/>
+      {scrollPosition > 500 && (
+        <Link href="/#top">
+          <Box
+            position="fixed"
+            bottom="20px"
+            right={['16px', '84px']}
+            zIndex={1}
+          >
+            <IconButton
+              aria-label="Search database"
+              color="black"
+              icon={<ArrowUpIcon />}
+            />
+          </Box>
+        </Link>
+      )}
     </Box>
   );
 }
