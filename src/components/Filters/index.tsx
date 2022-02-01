@@ -38,7 +38,7 @@ export default function Filters({
       <Box pl={6} mt={6}>
         <Text fontSize={'16px'}>Filters</Text>
       </Box>
-      <Stack direction={['column', 'row']} width={["64.1%, 90%"]} paddingX={6} mt={2}>
+      <Stack direction={['column', 'row']} width={["90%", "64.1%"]} paddingX={6} mt={2}>
         <DatePicker
           placeholderText="From"
           customInput={<Input />}
